@@ -26,6 +26,9 @@ You need to provide this.
 
 ## Usage
 
+https://raw.githubusercontent.com/superwills/NibbleAndAHalf/master/NibbleAndAHalf/base64.c
+https://raw.githubusercontent.com/superwills/NibbleAndAHalf/master/NibbleAndAHalf/base64.h
+
 To make things easy, _vroughtime_ does not even ship with
 a build system. You just need the following files:
 
