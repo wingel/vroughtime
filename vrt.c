@@ -10,6 +10,8 @@
 #include "tweetnacl.h"
 #include "vrt.h"
 
+#include "createHeader.h"
+
 #define CHECK(x)                                                               \
   do {                                                                         \
     int ret;                                                                   \
@@ -295,11 +297,31 @@ static const uint8_t query_header[] = {0x02, 0x00, 0x00, 0x00, 0x40, 0x00,
 
 vrt_ret_t vrt_make_query(uint8_t *nonce, uint32_t nonce_len, uint8_t *out_query,
                          uint32_t out_query_len) {
-  CHECK_TRUE(nonce_len >= VRT_NONCE_SIZE, VRT_ERROR_WRONG_SIZE);
+  /*CHECK_TRUE(nonce_len >= VRT_NONCE_SIZE, VRT_ERROR_WRONG_SIZE);
   CHECK_TRUE(out_query_len >= 1024, VRT_ERROR_WRONG_SIZE);
   memset(out_query, 0, out_query_len);
   memcpy(out_query, query_header, sizeof query_header);
-  memcpy(out_query + sizeof query_header, nonce, VRT_NONCE_SIZE);
+  memcpy(out_query + sizeof query_header, nonce, VRT_NONCE_SIZE);*/
+
+
+  bool success = false;
+  size_t requestBufLen = 0;
+  size_t paddingLen = MAX_MESSAGE_LENGTH - (craggy_messageHeaderLen(3) + VRT_NONCE_SIZE + sizeof(uint32_t));
+  uint8_t padding[paddingLen];
+  craggy_memset(padding, 0, paddingLen);
+  CraggyRoughtimeMessageBuilder *builder = NULL;
+  if (craggy_createMessageBuilder(3, out_query, MAX_MESSAGE_LENGTH, &builder)) {
+      if (craggy_addTagData(builder, VRT_TAG_PAD, padding, paddingLen)) {
+        uint32_t version = 0x80000003;
+        if (craggy_addTagData(builder, VRT_TAG_VER, (uint8_t *) &version, sizeof(uint32_t))) {
+          if (craggy_addTagData(builder, VRT_TAG_NONCE, nonce, VRT_NONCE_SIZE)) {
+            success = craggy_finish(builder, &requestBufLen);
+            assert(requestBufLen == MAX_MESSAGE_LENGTH);
+          }
+        }
+      }
+      craggy_destroyMessageBuilder(builder);
+    }
 
   return VRT_SUCCESS;
 }
