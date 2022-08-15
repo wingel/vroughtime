@@ -14,7 +14,7 @@
 #include "vrt.h"
 #include "base64.h"
 
-#define RECV_BUFFER_LEN 1024
+#define RECV_BUFFER_LEN VRT_QUERY_PACKET_LEN
 
 // https://github.com/cloudflare/roughtime/blob/master/ecosystem.json
 
@@ -22,6 +22,7 @@
   do {                                                                         \
     int ret;                                                                   \
     if ((ret = x) != VRT_SUCCESS) {                                            \
+    fprintf(stderr, "%s:%u: ret %u\n", __func__, __LINE__, ret); \
       return (ret);                                                            \
     }                                                                          \
   } while (0)
@@ -58,14 +59,16 @@ int main(int argc, char **argv) {
   int port;
   uint8_t *public_key;
   int public_key_len;
+  int variant;
 
-  if (argc != 4) {
-    fprintf(stderr, "Usage: client host port public_key\n");
+  if (argc != 5) {
+    fprintf(stderr, "Usage: client host port public_key variant\n");
     exit(1);
   }
   host = argv[1];
   port = atoi(argv[2]);
   public_key = unbase64(argv[3], strlen(argv[3]), &public_key_len);
+  variant = atoi(argv[4]);
   if (public_key == NULL || public_key_len != 32) {
     fprintf(stderr, "invalid public key\n");
     exit(1);
@@ -76,7 +79,7 @@ int main(int argc, char **argv) {
 
   /* prepare query */
   uint8_t nonce[VRT_NONCE_SIZE] = "preferably a random byte buffer";
-  CHECK(vrt_make_query(nonce, 64, query, sizeof query));
+  CHECK(vrt_make_query(nonce, 64, query, sizeof query, variant));
 
   /* send query */
   int n = sendto(sockfd, (const char *)query, sizeof query, 0,
@@ -93,10 +96,9 @@ int main(int argc, char **argv) {
   uint32_t out_radii;
 
   CHECK(vrt_parse_response(nonce, 64, recv_buffer,
-                            sizeof recv_buffer * sizeof recv_buffer[0],
-                            //public_key_google, &out_midpoint,
+                            n,
                             public_key, &out_midpoint,
-                            &out_radii));
+			   &out_radii, variant));
   printf("midp %" PRIu64 " radi %u\n", out_midpoint, out_radii);
   close(sockfd);
 

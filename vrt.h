@@ -59,10 +59,10 @@ vrt_ret_t vrt_blob_slice(const vrt_blob_t *b, vrt_blob_t *slice,
 
 vrt_ret_t vrt_parse_response(uint8_t *nonce_sent, uint32_t nonce_len,
                              uint32_t *reply, uint32_t reply_len, uint8_t *pk,
-                             uint64_t *out_midpoint, uint32_t *out_radii);
+                             uint64_t *out_midpoint, uint32_t *out_radii, int variant);
 
 vrt_ret_t vrt_make_query(uint8_t *nonce, uint32_t nonce_len, uint8_t *out_query,
-                         uint32_t out_query_len);
+                         uint32_t out_query_len, int variant);
 
 static const char CONTEXT_CERT[] = "RoughTime v1 delegation signature--\x00";
 static const char CONTEXT_RESP[] = "RoughTime v1 response signature\x00";
@@ -86,7 +86,8 @@ static const char CONTEXT_RESP[] = "RoughTime v1 response signature\x00";
 #define VRT_DOMAIN_LABEL_LEAF (0x00)
 #define VRT_DOMAIN_LABEL_NODE (0x01)
 
-#define VRT_QUERY_PACKET_LEN (1024)
+#define VRT_QUERY_LEN 1024
+#define VRT_QUERY_PACKET_LEN (12+VRT_QUERY_LEN)
 
 #ifdef __cplusplus
 }

@@ -6,22 +6,161 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
+#include <assert.h>
 
 #include "tweetnacl.h"
 #include "vrt.h"
+
+void hd(const void *buffer, unsigned size)
+{
+    const uint8_t *ptr = buffer;
+    unsigned i;
+
+    for (i = 0; i < size; i++) {
+	if (i)
+	    printf(" ");
+	printf("%02x", ptr[i]);
+    }
+    printf("\n");
+}
+
+#define RT_MAX_PAYLOAD_SIZE 1024
+#define RT_MAX_PACKET_SIZE (12 + RT_MAX_PAYLOAD_SIZE)
+
+enum RT_VARIANT {
+  RT_PRE_IETF,
+  RT_IETF_DRAFT_05,
+};
+
+struct rt_builder
+{
+    enum RT_VARIANT variant;
+    unsigned num_tags;
+    unsigned current_tag;
+    uint8_t *buffer;
+    uint32_t *size_ptr;
+    uint32_t *tag_ptr;
+    uint8_t *data_ptr;
+    unsigned offset;
+};
+
+static uint8_t RT_MAGIC[8] = { 'R', 'O', 'U', 'G','H', 'T', 'I', 'M' };
+
+#define RT_MAKE_TAG(a, b, c, d) 	\
+    (((uint32_t)((a) & 255)) | 		\
+     (((uint32_t)((b) & 255)) << 8) | 	\
+     (((uint32_t)((c) & 255)) << 16) | 	\
+     (((uint32_t)((d) & 255)) << 24))
+
+#define RT_TAG_VER  RT_MAKE_TAG('V', 'E', 'R', 0)
+#define RT_TAG_NONC RT_MAKE_TAG('N', 'O', 'N', 'C')
+#define RT_TAG_PAD  RT_MAKE_TAG('P', 'A', 'D', 0xff)
+
+static uint32_t rt_host_to_le32(uint32_t v) { return v; };
+// static uint32_t rt_le32_to_host(uint32_t v) { return v; };
+
+static void rt_put_uint32(void *buf, uint32_t v)
+{
+    *(uint32_t *)buf = rt_host_to_le32(v);
+}
+
+static uint32_t rt_get_uint32(void *buf)
+{
+    return *(uint32_t *)buf;
+}
+
+void rt_query_init(struct rt_builder *builder, uint8_t *buffer,
+                   unsigned num_tags, enum RT_VARIANT variant)
+{
+    assert(num_tags >= 1);
+
+    builder->buffer = buffer;
+    builder->num_tags = num_tags;
+    builder->current_tag = 0;
+    builder->variant = variant;
+
+    if (variant >= RT_IETF_DRAFT_05) {
+        memcpy(buffer, RT_MAGIC, sizeof(RT_MAGIC));
+        buffer += sizeof(RT_MAGIC);
+        rt_put_uint32(buffer, RT_MAX_PAYLOAD_SIZE);
+        buffer += sizeof(uint32_t);
+    }
+
+    rt_put_uint32(buffer, num_tags);
+    buffer += sizeof(uint32_t);
+
+    builder->size_ptr = (uint32_t *)buffer;
+    buffer += sizeof(uint32_t) * (builder->num_tags-1);
+
+    builder->tag_ptr = (uint32_t *)buffer;
+    buffer += sizeof(uint32_t) * (builder->num_tags);
+
+    builder->data_ptr = buffer;
+    builder->offset = 0;
+}
+
+void rt_query_add_tag(struct rt_builder *builder, uint32_t tag,
+		      const void *data, unsigned size)
+{
+    assert(builder->current_tag <= builder->num_tags);
+    assert((size & 3) == 0);
+    assert(builder->data_ptr + size <= builder->buffer + RT_MAX_PACKET_SIZE);
+
+    fprintf(stderr, "%s: %u, 0x%04x\n", __func__, builder->current_tag, tag);
+
+    if (builder->current_tag) {
+        assert(rt_get_uint32(&builder->tag_ptr[builder->current_tag - 1]) < tag);
+	rt_put_uint32(&builder->size_ptr[builder->current_tag - 1], builder->offset);
+    }
+
+    rt_put_uint32(&builder->tag_ptr[builder->current_tag], tag);
+
+    memcpy(builder->data_ptr + builder->offset, data, size);
+
+    builder->current_tag++;
+    builder->offset += size;
+}
+
+void rt_query_finish(struct rt_builder *builder)
+{
+    uint8_t *ptr = builder->data_ptr + builder->offset;
+    assert(builder->current_tag == builder->num_tags);
+    memset(ptr, 0, builder->buffer + RT_MAX_PACKET_SIZE - ptr);
+}
+
+void rt_query_make(struct rt_builder *builder, uint8_t *buffer,
+                   void *nonc, enum RT_VARIANT variant)
+{
+    if (variant >= RT_IETF_DRAFT_05) {
+        uint32_t ver = rt_host_to_le32(0x08000003);
+        rt_query_init(builder, buffer, 3, variant);
+        rt_query_add_tag(builder, RT_TAG_VER, &ver, sizeof(ver));
+        rt_query_add_tag(builder, RT_TAG_NONC, nonc, 32);
+        rt_query_add_tag(builder, RT_TAG_PAD, NULL, 0);
+    } else {
+        rt_query_init(builder, buffer, 2, variant);
+        rt_query_add_tag(builder, RT_TAG_NONC, nonc, 64);
+        rt_query_add_tag(builder, RT_TAG_PAD, NULL, 0);
+    }
+    rt_query_finish(builder);
+}
 
 #define CHECK(x)                                                               \
   do {                                                                         \
     int ret;                                                                   \
     if ((ret = x) != VRT_SUCCESS) {                                            \
+    fprintf(stderr, "%s:%u: ret %u\n", __func__, __LINE__, ret); \
       return (ret);                                                            \
     }                                                                          \
   } while (0)
 
 #define CHECK_TRUE(x, errorcode)                                               \
   do {                                                                         \
-    if (!(x))                                                                  \
+    if (!(x)) {								\
+    fprintf(stderr, "%s:%u: ret %u\n", __func__, __LINE__, errorcode); \
       return (errorcode);                                                      \
+    } \
   } while (0)
 
 #define CHECK_NOT_NULL(x) CHECK_TRUE((x) != NULL, VRT_ERROR_NULL_ARGUMENT)
@@ -166,11 +305,11 @@ static vrt_ret_t vrt_verify_pubk(vrt_blob_t *sig, vrt_blob_t *srep,
   return (ret == 0) ? VRT_SUCCESS : VRT_ERROR_PUBK;
 }
 
-static vrt_ret_t vrt_hash_leaf(uint8_t *out, const uint8_t *in) {
-  uint8_t msg[VRT_NONCE_SIZE + 1 /* domain separation label */];
+static vrt_ret_t vrt_hash_leaf(uint8_t *out, const uint8_t *in, int noncesize) {
+  uint8_t msg[VRT_NODESIZE_MAX + 1 /* domain separation label */];
   msg[0] = VRT_DOMAIN_LABEL_LEAF;
-  memcpy(msg + 1, in, VRT_NONCE_SIZE);
-  crypto_hash_sha512(out, msg, sizeof msg);
+  memcpy(msg + 1, in, noncesize);
+  crypto_hash_sha512(out, msg, noncesize + 1);
   return VRT_SUCCESS;
 }
 
@@ -185,7 +324,7 @@ static vrt_ret_t vrt_hash_node(uint8_t *out, const uint8_t *left,
 }
 
 static vrt_ret_t vrt_verify_nonce(vrt_blob_t *srep, vrt_blob_t *indx,
-                                  vrt_blob_t *path, uint8_t *sent_nonce) {
+                                  vrt_blob_t *path, uint8_t *sent_nonce, enum RT_VARIANT variant) {
   vrt_blob_t root;
   CHECK(vrt_get_tag(&root, srep, VRT_TAG_ROOT));
 
@@ -194,12 +333,15 @@ static vrt_ret_t vrt_verify_nonce(vrt_blob_t *srep, vrt_blob_t *indx,
   CHECK_TRUE(srep->size == MAX_SREP_SIZE || srep->size == ALTERNATE_SREP_SIZE,
              VRT_ERROR_WRONG_SIZE);
 
-  CHECK(vrt_hash_leaf(hash, sent_nonce));
-
   // IETF version has node size 32 bytes,
   // original version has 64-byte nodes.
-  const int nodesize =
-      srep->size == MAX_SREP_SIZE ? VRT_NODESIZE_MAX : VRT_NODESIZE_ALTERNATE;
+  const int nodesize = variant >= RT_IETF_DRAFT_05 ? VRT_NODESIZE_ALTERNATE : VRT_NODESIZE_MAX;
+
+  CHECK(vrt_hash_leaf(hash, sent_nonce, nodesize));
+
+  fprintf(stderr, "srep->size %u\n",
+	  (unsigned)srep->size);
+
   uint32_t index = 0;
   uint32_t offset = 0;
   vrt_blob_t path_chunk = {0};
@@ -221,6 +363,12 @@ static vrt_ret_t vrt_verify_nonce(vrt_blob_t *srep, vrt_blob_t *indx,
     }
     offset += nodesize / 4;
   }
+
+  fprintf(stderr, "root.size %u, nodesize %u\n",
+	  (unsigned)root.size, (unsigned)nodesize);
+
+  hd(root.data, nodesize);
+  hd(hash, nodesize);
 
   CHECK_TRUE(root.size == nodesize, VRT_ERROR_WRONG_SIZE);
   return (memcmp(root.data, hash, nodesize) == 0) ? VRT_SUCCESS
@@ -258,7 +406,7 @@ static vrt_ret_t vrt_verify_bounds(vrt_blob_t *srep, vrt_blob_t *dele,
 
 vrt_ret_t vrt_parse_response(uint8_t *nonce_sent, uint32_t nonce_len,
                              uint32_t *reply, uint32_t reply_len, uint8_t *pk,
-                             uint64_t *out_midpoint, uint32_t *out_radii) {
+                             uint64_t *out_midpoint, uint32_t *out_radii, int variant) {
   vrt_blob_t parent;
   vrt_blob_t cert = {0};
   vrt_blob_t cert_sig = {0};
@@ -268,6 +416,25 @@ vrt_ret_t vrt_parse_response(uint8_t *nonce_sent, uint32_t nonce_len,
   vrt_blob_t sig = {0};
   vrt_blob_t indx = {0};
   vrt_blob_t path = {0};
+
+  if (variant >= RT_IETF_DRAFT_05) {
+    if (reply_len < 12) {
+      fprintf(stderr, "too short reply\n");
+      return VRT_ERROR_WRONG_SIZE;
+    }
+    if (memcmp("ROUGHTIM", reply, 8)) {
+      fprintf(stderr, "bad ROUGHTIM magic\n");
+      return VRT_ERROR_MALFORMED;
+    }
+    if (reply_len - 12 != *(reply+2)) {
+      fprintf(stderr, "bad length, expected %u, got %u\n",
+	      reply_len - 12,
+	      (int)*(uint32_t *)(reply+8));
+      return VRT_ERROR_MALFORMED;
+    }
+    reply += 3;
+    reply_len -= 12;
+  }
 
   CHECK_TRUE(nonce_len >= VRT_NONCE_SIZE, VRT_ERROR_WRONG_SIZE);
   CHECK(vrt_blob_init(&parent, reply, reply_len));
@@ -283,23 +450,17 @@ vrt_ret_t vrt_parse_response(uint8_t *nonce_sent, uint32_t nonce_len,
   CHECK(vrt_verify_dele(&cert_sig, &cert_dele, pk));
   CHECK_TRUE(pubk.size == 32, VRT_ERROR_MALFORMED);
   CHECK(vrt_verify_pubk(&sig, &srep, pubk.data));
-  CHECK(vrt_verify_nonce(&srep, &indx, &path, nonce_sent));
+  CHECK(vrt_verify_nonce(&srep, &indx, &path, nonce_sent, variant));
   CHECK(vrt_verify_bounds(&srep, &cert_dele, out_midpoint, out_radii));
 
   return VRT_SUCCESS;
 }
 
-static const uint8_t query_header[] = {0x02, 0x00, 0x00, 0x00, 0x40, 0x00,
-                                       0x00, 0x00, 0x4e, 0x4f, 0x4e, 0x43,
-                                       0x50, 0x41, 0x44, 0xff};
-
 vrt_ret_t vrt_make_query(uint8_t *nonce, uint32_t nonce_len, uint8_t *out_query,
-                         uint32_t out_query_len) {
-  CHECK_TRUE(nonce_len >= VRT_NONCE_SIZE, VRT_ERROR_WRONG_SIZE);
-  CHECK_TRUE(out_query_len >= 1024, VRT_ERROR_WRONG_SIZE);
-  memset(out_query, 0, out_query_len);
-  memcpy(out_query, query_header, sizeof query_header);
-  memcpy(out_query + sizeof query_header, nonce, VRT_NONCE_SIZE);
+                         uint32_t out_query_len, int variant) {
+  struct rt_builder builder;
+
+  rt_query_make(&builder, out_query, nonce, variant);
 
   return VRT_SUCCESS;
 }
