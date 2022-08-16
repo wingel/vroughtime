@@ -115,7 +115,7 @@ int doit(struct rt_server *server)
   if (server->variant == 0) {
       t = out_midpoint / 1000000;
   } else {
-      unsigned mjd = out_midpoint >> 24;
+      unsigned mjd = out_midpoint >> 40;
       unsigned seconds_from_midnight = (out_midpoint & 0xffffffffff) / 1000000;
       t = (mjd - 40587) * 86400 + seconds_from_midnight;
   }
