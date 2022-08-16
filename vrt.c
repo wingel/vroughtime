@@ -289,8 +289,7 @@ static vrt_ret_t vrt_verify_pubk(vrt_blob_t *sig, vrt_blob_t *srep,
   uint8_t msg[CERT_SIG_SIZE + CONTEXT_RESP_SIZE + MAX_SREP_SIZE] = {0};
 
   CHECK_TRUE(sig->size == CERT_SIG_SIZE, VRT_ERROR_WRONG_SIZE);
-  CHECK_TRUE(srep->size == MAX_SREP_SIZE || srep->size == ALTERNATE_SREP_SIZE,
-             VRT_ERROR_WRONG_SIZE);
+  CHECK_TRUE(srep->size <= MAX_SREP_SIZE, VRT_ERROR_WRONG_SIZE);
 
   memcpy(&msg, sig->data, sig->size);
   memcpy(msg + sig->size, CONTEXT_RESP, CONTEXT_RESP_SIZE);
@@ -330,17 +329,13 @@ static vrt_ret_t vrt_verify_nonce(vrt_blob_t *srep, vrt_blob_t *indx,
 
   uint8_t hash[VRT_HASHOUT_SIZE] = {0};
 
-  CHECK_TRUE(srep->size == MAX_SREP_SIZE || srep->size == ALTERNATE_SREP_SIZE,
-             VRT_ERROR_WRONG_SIZE);
+  CHECK_TRUE(srep->size <= MAX_SREP_SIZE, VRT_ERROR_WRONG_SIZE);
 
   // IETF version has node size 32 bytes,
   // original version has 64-byte nodes.
   const int nodesize = variant >= RT_IETF_DRAFT_05 ? VRT_NODESIZE_ALTERNATE : VRT_NODESIZE_MAX;
 
   CHECK(vrt_hash_leaf(hash, sent_nonce, nodesize));
-
-  fprintf(stderr, "srep->size %u\n",
-	  (unsigned)srep->size);
 
   uint32_t index = 0;
   uint32_t offset = 0;
@@ -363,12 +358,6 @@ static vrt_ret_t vrt_verify_nonce(vrt_blob_t *srep, vrt_blob_t *indx,
     }
     offset += nodesize / 4;
   }
-
-  fprintf(stderr, "root.size %u, nodesize %u\n",
-	  (unsigned)root.size, (unsigned)nodesize);
-
-  hd(root.data, nodesize);
-  hd(hash, nodesize);
 
   CHECK_TRUE(root.size == nodesize, VRT_ERROR_WRONG_SIZE);
   return (memcmp(root.data, hash, nodesize) == 0) ? VRT_SUCCESS
