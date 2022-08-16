@@ -415,7 +415,7 @@ vrt_ret_t vrt_parse_response(uint8_t *nonce_sent, uint32_t nonce_len,
       fprintf(stderr, "bad ROUGHTIM magic\n");
       return VRT_ERROR_MALFORMED;
     }
-    if (reply_len - 12 != *(reply+2)) {
+    if (reply_len - 12 < *(reply+2)) {
       fprintf(stderr, "bad length, expected %u, got %u\n",
 	      reply_len - 12,
 	      (int)*(uint32_t *)(reply+8));
