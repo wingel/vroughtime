@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "vrt.h"
 #include "base64.h"
@@ -109,7 +110,30 @@ int doit(struct rt_server *server)
                             n,
                             server->public_key, &out_midpoint,
 			   &out_radii, server->variant));
+
+  time_t t;
+  if (server->variant == 0) {
+      t = out_midpoint / 1000000;
+  } else {
+      unsigned mjd = out_midpoint >> 40;
+      unsigned seconds_from_midnight = (out_midpoint & 0xffffffffff) / 1000000;
+      t = (mjd - 40587) * 86400 + seconds_from_midnight;
+  }
+
+  unsigned microseconds = out_midpoint % 1000000;
+
+  struct tm *tm = gmtime(&t);
+
   printf("midp %" PRIu64 " radi %u\n", out_midpoint, out_radii);
+  printf("%04u-%02u-%02u %02u:%02u:%02u.%06u\n",
+	 tm->tm_year + 1900,
+	 tm->tm_mon + 1,
+	 tm->tm_mday,
+	 tm->tm_hour,
+	 tm->tm_min,
+	 tm->tm_sec,
+	 microseconds);
+
   close(sockfd);
 
   return 0;
