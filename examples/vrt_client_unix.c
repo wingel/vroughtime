@@ -1,3 +1,5 @@
+#include <time.h>
+#include "algotest.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
@@ -10,7 +12,6 @@
 #include <unistd.h>
 #include <assert.h>
 #include <inttypes.h>
-#include <time.h>
 
 #include "vrt.h"
 #include "base64.h"
@@ -18,6 +19,7 @@
 #define RECV_BUFFER_LEN VRT_QUERY_PACKET_LEN
 
 // https://github.com/cloudflare/roughtime/blob/master/ecosystem.json
+
 
 #define CHECK(x)                                                               \
   do {                                                                         \
@@ -27,6 +29,18 @@
       return (ret);                                                            \
     }                                                                          \
   } while (0)
+
+// Uses a time.h function to get the time
+uint64_t get_time(){
+
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  uint64_t t = 
+    (uint64_t)(tv.tv_sec) * 1000000 +
+    (uint64_t)(tv.tv_usec);
+
+  return t;
+}
 
 int prepare_socket(void)
 {
@@ -64,7 +78,7 @@ struct rt_server servers[] = {
     { "162.159.200.123", 2002, 0, { 0x80,0x3e,0xb7,0x85,0x28,0xf7,0x49,0xc4,0xbe,0xc2,0xe3,0x9e,0x1a,0xbb,0x9b,0x5e,0x5a,0xb7,0xe4,0xdd,0x5c,0xe4,0xb6,0xf2,0xfd,0x2f,0x93,0xec,0xc3,0x53,0x8f,0x1a } }, /* roughtime.cloudflare.com */
     { "35.192.98.51", 2002, 0, { 0x01,0x6e,0x6e,0x02,0x84,0xd2,0x4c,0x37,0xc6,0xe4,0xd7,0xd8,0xd5,0xb4,0xe1,0xd3,0xc1,0x94,0x9c,0xea,0xa5,0x45,0xbf,0x87,0x56,0x16,0xc9,0xdc,0xe0,0xc9,0xbe,0xc1 } }, /* roughtime.int08h.com */
     { "192.36.143.134", 2002, 1, { 0x4b,0x70,0x33,0x7d,0x92,0x79,0x0a,0x34,0x9d,0x90,0x9d,0xb5,0x64,0x91,0x9b,0xc6,0xa7,0x58,0x3f,0xf4,0xa8,0x13,0xc7,0xd7,0x29,0x8d,0x3e,0x6a,0x27,0x2c,0x7a,0x12 } }, /* roughtime.se */
-    { "193.180.164.51", 2002, 1, { 0x19,0xd1,0xa9,0xf6,0x6e,0x40,0x6f,0x0a,0x82,0x3a,0x94,0xd5,0x62,0xaf,0xb2,0x96,0x20,0x48,0xaf,0x38,0x75,0xc1,0xe7,0x7b,0x55,0x84,0x52,0xe4,0x2c,0x4c,0x63,0x75 } }, /* roughtime.weinigel.se */
+    /**/{ "193.180.164.51", 2002, 1, { 0x19,0xd1,0xa9,0xf6,0x6e,0x40,0x6f,0x0a,0x82,0x3a,0x94,0xd5,0x62,0xaf,0xb2,0x96,0x20,0x48,0xaf,0x38,0x75,0xc1,0xe7,0x7b,0x55,0x84,0x52,0xe4,0x2c,0x4c,0x63,0x75 } }, /* roughtime.weinigel.se */
     { "194.58.207.198", 2002, 1, { 0xf6,0x5d,0x49,0x37,0x81,0xda,0x90,0x69,0xc6,0xe3,0x8c,0xb2,0xab,0x23,0x4d,0x09,0xbd,0x07,0x37,0x45,0xdf,0xb3,0x2b,0x01,0x6e,0x79,0x7f,0x91,0xb6,0x68,0x64,0x37 } }, /* sth1.roughtime.netnod.se */
     { "194.58.207.199", 2002, 1, { 0x4f,0xfc,0x71,0x5f,0x81,0x11,0x50,0x10,0x0e,0xa6,0xde,0xb8,0x67,0xca,0x61,0x59,0xa9,0x8a,0xb0,0x04,0x99,0xc4,0x9d,0x15,0x5a,0xe8,0x8f,0x9b,0x71,0x92,0xff,0xc8 } }, /* sth2.roughtime.netnod.se */
     { "194.58.207.196", 2002, 1, { 0xb4,0x03,0xec,0x41,0xcd,0xc3,0xdf,0xa9,0x89,0x3c,0xe5,0xf5,0xfc,0xb2,0xcd,0x6d,0x5d,0x0c,0xdd,0xfb,0x93,0x3e,0x3c,0x16,0xe7,0x89,0x86,0xbf,0x0f,0x95,0xd6,0x11 } }, /* lab.roughtime.netnod.se */
@@ -80,37 +94,8 @@ struct rt_server servers[] = {
     { "194.58.207.197", 2009, 1, { 0x88,0x56,0x3d,0x82,0x52,0x27,0xf1,0x21,0xc6,0xb6,0x41,0x53,0x75,0x41,0x02,0x61,0xd0,0xb7,0xed,0x3e,0x0f,0x34,0xcd,0x98,0x48,0x5c,0xe3,0x6c,0x46,0xe6,0x7d,0x92 } }, /* falseticker.roughtime.netnod.se */
 };
 
-int doit(struct rt_server *server)
+void print_server(struct rt_server *server, uint64_t out_midpoint, uint32_t out_radii)
 {
-  uint32_t recv_buffer[RECV_BUFFER_LEN / 4] = {0};
-  uint8_t query[VRT_QUERY_PACKET_LEN] = {0};
-  struct sockaddr_in servaddr;
-  int sockfd = prepare_socket();
-  prepare_servaddr(&servaddr, server->host, server->port);
-
-  /* prepare query */
-  uint8_t nonce[VRT_NONCE_SIZE] = "preferably a random byte buffer";
-  CHECK(vrt_make_query(nonce, 64, query, sizeof query, server->variant));
-
-  /* send query */
-  int n = sendto(sockfd, (const char *)query, sizeof query, 0,
-             (const struct sockaddr *)&servaddr, sizeof(servaddr));
-
-  /* receive packet */
-  assert(n==sizeof query);
-  do {
-    n = recv(sockfd, recv_buffer, (sizeof recv_buffer) * sizeof recv_buffer[0], 0 /* flags */);
-  } while (n == -1 && errno == EINTR);
-
-  /* parse response */
-  uint64_t out_midpoint;
-  uint32_t out_radii;
-
-  CHECK(vrt_parse_response(nonce, 64, recv_buffer,
-                            n,
-                            server->public_key, &out_midpoint,
-			   &out_radii, server->variant));
-
   time_t t;
   if (server->variant == 0) {
       t = out_midpoint / 1000000;
@@ -125,7 +110,7 @@ int doit(struct rt_server *server)
   struct tm *tm = gmtime(&t);
 
   printf("midp %" PRIu64 " radi %u\n", out_midpoint, out_radii);
-  printf("%04u-%02u-%02u %02u:%02u:%02u.%06u\n",
+  printf("%04u-%02u-%02u %02u:%02u:%02u.%06u\n\n",
 	 tm->tm_year + 1900,
 	 tm->tm_mon + 1,
 	 tm->tm_mday,
@@ -133,6 +118,80 @@ int doit(struct rt_server *server)
 	 tm->tm_min,
 	 tm->tm_sec,
 	 microseconds);
+}
+
+int doit(struct rt_server *server, algoReqs *algo)
+{
+  uint32_t recv_buffer[RECV_BUFFER_LEN / 4] = {0};
+  uint8_t query[VRT_QUERY_PACKET_LEN] = {0};
+  struct sockaddr_in servaddr;
+  int sockfd = prepare_socket();
+  prepare_servaddr(&servaddr, server->host, server->port);
+
+  /* prepare query */
+  uint8_t nonce[VRT_NONCE_SIZE] = "preferably a random byte buffer";
+  CHECK(vrt_make_query(nonce, 64, query, sizeof query, server->variant));
+
+  /* send query */
+
+  // Gets the current time (us since epoch)
+  uint64_t st = get_time();
+
+  clock_t function_time;
+  function_time = clock();
+  int n = sendto(sockfd, (const char *)query, sizeof query, 0,
+             (const struct sockaddr *)&servaddr, sizeof(servaddr));
+
+  /* receive packet */
+  assert(n==sizeof query);
+  do {
+    n = recv(sockfd, recv_buffer, (sizeof recv_buffer) * sizeof recv_buffer[0], 0 /* flags */);
+  } while (n == -1 && errno == EINTR);
+
+  // The time it took for the message to be sent and recieved
+  function_time = clock() - function_time;
+
+  // Gets current time (us since epoch)
+  uint64_t rt = get_time();
+
+  // Calculates RTT
+  double rtt = ((double)function_time)/CLOCKS_PER_SEC;
+
+  /* parse response */
+  uint64_t out_midpoint;
+  uint32_t out_radii;
+
+  CHECK(vrt_parse_response(nonce, 64, recv_buffer,
+                            n,
+                            server->public_key, &out_midpoint,
+			   &out_radii, server->variant));
+
+  double uncertainty = (double)out_radii/1000000 + rtt/2;
+
+  uint64_t local = (st + rt) / 2;
+  double adjustment = 0;
+  uint64_t mjd_time;
+  
+  // Take into account the server version
+  if(server->variant == 0){
+    // I believe this outputs correct adjustment (seconds)
+    adjustment = ((double)out_midpoint - (double)local)/1000000;
+
+  }else{
+    // This does not output correct time in seconds (no idea why)
+    unsigned mjd = out_midpoint >> 40;
+    unsigned seconds_from_midnight = (out_midpoint & 0xffffffffff);
+    unsigned microseconds = out_midpoint % 1000000;
+    mjd_time = (mjd - 40587) * 86400000000 + seconds_from_midnight + microseconds;
+    
+    adjustment = ((double)mjd_time - (double)local)/1000000;
+  }
+
+  // Finds the overlap from the edges
+  if(find_overlap(algo, adjustment, uncertainty) == 1){
+    return 1;
+  }
+  printf("\n\n");
 
   close(sockfd);
 
@@ -144,12 +203,17 @@ int main(int argc, char **argv) {
   int tmp_key_len;
   struct rt_server server;
 
+  // Temporary name, need to rename (stores the edges)
+  algoReqs *algo = createAlgoReqs(10);
+
   if (argc == 1) {
       int i;
 
       for (i = 0; i < sizeof(servers) / sizeof(servers[0]); i++) {
-	  printf("%s:%u:\n", servers[i].host, servers[i].port);
-	  doit(&servers[i]);
+	      printf("%s:%u:\n", servers[i].host, servers[i].port);
+	      if(doit(&servers[i], algo) == 1){
+          printf("Something went wrong inserting an edge\n");
+        }
       }
   } else {
       if (argc != 5) {
@@ -169,8 +233,16 @@ int main(int argc, char **argv) {
 
       server.variant = atoi(argv[4]);
 
-      doit(&server);
+      doit(&server, algo);
   }
+
+  printf("Printing the edges\n");
+  print_tree(algo);
+  double adj = get_adjustment(algo);
+  printf("adj: %f\n\n", adj);
+
+  // Free the allocated memory (hopefully no leaks)
+  free_tree(algo);
 
   return 0;
 }

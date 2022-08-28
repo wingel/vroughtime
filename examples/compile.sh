@@ -2,14 +2,15 @@
 
 set -euxo pipefail
 
-CC=clang
+CC=gcc
 
 rm -f *.o client
 $CC -c ../tweetnacl.c -o tweetnacl.o
 $CC -c ../base64.c -o base64.o
+$CC -c ../algotest.c -o algotest.o
 $CC -Wall -g -DDEBUG -c ../vrt.c -o vrt.o
 
-$CC -I ../ -Wall -g -DDEBUG -o client vrt_client_unix.c vrt.o tweetnacl.o base64.o
+$CC -I ../ -Wall -g -DDEBUG -o client vrt_client_unix.c vrt.o tweetnacl.o base64.o algotest.o
 
 set +e
 ./client
