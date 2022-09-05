@@ -181,10 +181,9 @@ int doit(struct rt_server *server, algoReqs *algo)
   }else{
     // This does not output correct time in seconds (no idea why)
     unsigned mjd = out_midpoint >> 40;
-    unsigned seconds_from_midnight = (out_midpoint & 0xffffffffff);
-    unsigned microseconds = out_midpoint % 1000000;
-    mjd_time = (mjd - 40587) * 86400000000 + seconds_from_midnight + microseconds;
-    
+    uint64_t microseconds_from_midnight = out_midpoint & 0xffffffffff;
+    mjd_time = (mjd - 40587) * 86400000000 + microseconds_from_midnight;
+
     adjustment = ((double)mjd_time - (double)local)/1000000;
   }
 
