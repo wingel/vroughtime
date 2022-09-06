@@ -17,8 +17,7 @@ typedef struct EdgeList{
 
 struct algoReqs{
     EdgeList *edge_list;
-
-    int amount_responses;
+    
     double lo;
     double hi;
     double adjustment;
@@ -28,7 +27,7 @@ struct algoReqs{
     int wanted;
 };
 
-Edge* createEdge(int value, int chime){
+Edge* createEdge(double value, int chime){
     Edge *edge = calloc(1, sizeof(Edge));
     if(!edge) return NULL;
 
