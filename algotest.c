@@ -15,23 +15,24 @@ typedef struct EdgeList{
     Edge *root;
 }EdgeList;
 
-struct algoReqs{
+struct clusteringData{
     EdgeList *edge_list;
     
     double lo;
     double hi;
     double adjustment;
     double uncertainty;
+
     int n;
     int bad;
     int wanted;
+    int amount_responses;
 };
 
 Edge* createEdge(double value, int chime){
     Edge *edge = calloc(1, sizeof(Edge));
     if(!edge) return NULL;
 
-    edge->amount_edges = 0;
     edge->value = value;
     edge->chime = chime;
 
@@ -50,21 +51,22 @@ EdgeList* createEdgeList(){
     return edge_list;
 }
 
-algoReqs* createAlgoReqs(int n){
-    algoReqs *t = calloc(1, sizeof(algoReqs));
+clusteringData* createClusterData(int n){
+    clusteringData *new_edge_list = calloc(1, sizeof(clusteringData));
 
-    t->edge_list = createEdgeList();
-    if(!t->edge_list) return NULL;
+    new_edge_list->edge_list = createEdgeList();
+    if(!new_edge_list->edge_list) return NULL;
 
-    t->n = n;
-    t->bad = 0;
-    t->wanted = 0;
-    t->adjustment = 0;
-    t->uncertainty = 0;
-    t->hi = 0;
-    t->lo = 0;
+    new_edge_list->amount_responses = 0;
+    new_edge_list->n = n;
+    new_edge_list->bad = 0;
+    new_edge_list->wanted = 0;
+    new_edge_list->adjustment = 0;
+    new_edge_list->uncertainty = 0;
+    new_edge_list->hi = 0;
+    new_edge_list->lo = 0;
 
-    return t;
+    return new_edge_list;
 }
 
 void sortedInsert(Edge** root, Edge* new_edge)
@@ -111,14 +113,14 @@ int insertEdge(EdgeList *edge_list, double value, int chime){
     Edge* new_edge = createEdge(value, chime);
 
     // Checks if memory is allocated correctly
-    if(new_edge == NULL) return 1;
+    if(new_edge == NULL) return -1;
 
     sortedInsert(&(edge_list->root), new_edge);
 }
 
-void print_tree(algoReqs *algo)
+void print_tree(clusteringData *server_cluster_data)
 {
-    Edge *temp = algo->edge_list->root;
+    Edge *temp = server_cluster_data->edge_list->root;
     while(temp->next_edge != NULL){
         printf("%f ", temp->value);
         temp = temp->next_edge;
@@ -126,43 +128,43 @@ void print_tree(algoReqs *algo)
     printf("\n\n");
 }
 
-bool find_overlap(algoReqs *algo, double adjust, double uncert){
+int find_overlap(clusteringData *server_cluster_data, double adjust, double uncert){
 
-    algo->amount_responses++;
+    server_cluster_data->amount_responses++;
+    double lo = 0;
+    double hi = 0;
 
-    if(insertEdge(algo->edge_list, adjust-uncert, -1) == 1){
+    if(insertEdge(server_cluster_data->edge_list, adjust-uncert, -1) == -1){
         printf("Left edge fail\n");
-        return false;
+        return -1;
     }
 
-    if(!insertEdge(algo->edge_list, adjust+uncert, +1) == 1){
+    if(!insertEdge(server_cluster_data->edge_list, adjust+uncert, +1) == -1){
         printf("Right edge fail\n");
-        return false;
+        return -1;
     }
     
-    int max_allow = 0;
-    max_allow = algo->amount_responses - algo->n;
+    int max_allow = server_cluster_data->amount_responses - server_cluster_data->n;
 
+    // Too few edges currently added
     if (max_allow < 0){
-        return false;
-    }
+        return 0;
+    }    
 
-    for(int i = 0; i<max_allow; i++){
+    for(int i = 0; i<=max_allow; i++){
 
-        algo->wanted = algo->amount_responses - i;
+        server_cluster_data->wanted = server_cluster_data->amount_responses - i;
 
         int chime = 0;
-        double lo = 0;
-        double hi = 0;
 
         // Make a copy of the root
-        Edge *current_edge = algo->edge_list->root;
+        Edge *current_edge = server_cluster_data->edge_list->root;
 
         // Find lo
         while(current_edge->next_edge != NULL)
         {
             chime -= current_edge->chime;
-            if(chime >= algo->wanted)
+            if(chime >= server_cluster_data->wanted)
             {
                 lo = current_edge->value;
                 break;
@@ -179,49 +181,45 @@ bool find_overlap(algoReqs *algo, double adjust, double uncert){
         // Find hi
         while(current_edge->prev_edge != NULL){
             chime += current_edge->chime;
-
-            if (chime >= algo->wanted){
+            if (chime >= server_cluster_data->wanted){
                 hi = current_edge->value;
                 break;
             }
             current_edge = current_edge->prev_edge;
         }
 
-        // Check if lo and hi is not 0 (May want to find a better criteria)
         if(lo != 0 && hi != 0 && lo <= hi){
             break;
-        }
-        else{
-            return false;
-        }
+        }     
+    }
+      
+    server_cluster_data->lo = lo;
+    server_cluster_data->hi = hi;
+    server_cluster_data->adjustment = (lo + hi) / 2;
+    server_cluster_data->uncertainty = (hi - lo) / 2;
+    return 0;
+}
 
-        algo->lo = lo;
-        algo->hi = hi;
-        algo->adjustment = (lo + hi) / 2;
-        algo->uncertainty = (hi - lo) / 2;
-        return true;
+int is_overlap(clusteringData *server_cluster_data, int server_lo, int server_hi){
+    if(server_lo > server_cluster_data->hi || server_hi < server_cluster_data->lo){
+        return 0;
     }
 }
 
-bool is_overlap(algoReqs *algo, int server_lo, int server_hi){
-    if(server_lo > algo->hi || server_hi < algo->lo){
-        return true;
-    }
-}
-
-double get_adjustment(algoReqs *algo)
+double get_adjustment(clusteringData *server_cluster_data)
 {
-    return algo->adjustment;
+    return server_cluster_data->adjustment;
 }
 
-bool free_tree(algoReqs *algo)
+int free_tree(clusteringData *server_cluster_data)
 {
     Edge *current;
-    while(algo->edge_list->root != NULL){
-        current = algo->edge_list->root;
-        algo->edge_list->root = algo->edge_list->root->next_edge;
+    while(server_cluster_data->edge_list->root != NULL){
+        current = server_cluster_data->edge_list->root;
+        server_cluster_data->edge_list->root = server_cluster_data->edge_list->root->next_edge;
         free(current);
     }
-    free(algo->edge_list);
-    free(algo);
+    free(server_cluster_data->edge_list);
+    free(server_cluster_data);
+    return 0;
 }
