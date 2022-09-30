@@ -1,4 +1,10 @@
-#pragma once
+#ifndef VRT_H
+#define VRT_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 // st^H^H adapted from
@@ -19,10 +25,6 @@ typedef enum {
   VRT_ERROR_PUBK,
   VRT_ERROR_DELE,
 } vrt_ret_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // adapted from
 // https://github.com/nahojkap/craggy/blob/ce86b0f6ac90f3e71cbd50c43c4705a1de445e04/library/CraggyProtocol.h#L47
@@ -92,3 +94,5 @@ static const char CONTEXT_RESP[] = "RoughTime v1 response signature\x00";
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* VRT_H */
